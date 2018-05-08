@@ -89,13 +89,17 @@ func NewWithLocation(location *time.Location) *Cron {
 	}
 }
 
+type FuncJob func()
+
+func (f FuncJob) Run() { f() }
+
 // A wrapper that turns a func() into a cron.Job
-type FuncJob struct{
+type FuncJobComplex struct{
   function  interface{}
   params    []interface{}
 }
 
-func (el FuncJob) Run() {
+func (el FuncJobComplex) Run() {
   f := reflect.ValueOf( el.function )
   in := make([]reflect.Value, len( el.params ))
   for k, param := range el.params {
@@ -116,16 +120,22 @@ func (c *Cron) AddFunc(spec string, cmd interface{}, params ...interface{}) erro
     return errors.New( "the number of param is not adapted for function " + refName + " [ line: " + strconv.FormatInt( int64( line ), 10 ) + " - file: " + file +" ]" )
   }
 
-  return c.AddJob(spec, FuncJob{ cmd, params })
+  return c.AddJob(spec, FuncJobComplex{ cmd, params })
 }
 
 // AddJob adds a Job to the Cron to be run on the given schedule.
-func (c *Cron) AddJob(spec string, cmd FuncJob) error {
+func (c *Cron) AddJob(spec string, cmd interface{}) error {
 	schedule, err := Parse(spec)
 	if err != nil {
 		return err
 	}
-	c.Schedule(schedule, cmd)
+  switch converted := cmd.(type) {
+  case Job:
+    c.Schedule(schedule, converted)
+  case FuncJobComplex:
+    c.Schedule(schedule, converted)
+  }
+
 	return nil
 }
 
